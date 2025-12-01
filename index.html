@@ -640,19 +640,32 @@
     });
 
     // 단일 조회 (캐시 우선, 온라인 시 동기화)
+    // 타임아웃 유틸리티 함수
+    const withTimeout = (promise, ms) => {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+      );
+      return Promise.race([promise, timeout]);
+    };
+
+    const SUPABASE_QUERY_TIMEOUT = 10000; // 10초 타임아웃
+
     const dbGet = async (storeName, key) => {
       // 1. 로컬 캐시 먼저 확인
       let cached = await localDb[storeName].get(key);
       console.log(`dbGet(${storeName}, ${key}): cached =`, cached);
 
-      // 2. 온라인이면 Supabase에서 최신 데이터 가져오기
+      // 2. 온라인이면 Supabase에서 최신 데이터 가져오기 (타임아웃 적용)
       if (isOnline()) {
         try {
-          const { data, error } = await supabase
-            .from(storeName)
-            .select("*")
-            .eq("id", key)
-            .maybeSingle();
+          const { data, error } = await withTimeout(
+            supabase
+              .from(storeName)
+              .select("*")
+              .eq("id", key)
+              .maybeSingle(),
+            SUPABASE_QUERY_TIMEOUT
+          );
 
           console.log(`dbGet(${storeName}, ${key}): supabase response`, { data, error });
 
@@ -668,8 +681,8 @@
             cached = data;
           }
         } catch (e) {
-          console.error("dbGet sync error:", e);
-          // 에러 발생 시에도 캐시 데이터 반환
+          console.error("dbGet sync error:", e.message);
+          // 타임아웃 또는 에러 발생 시에도 캐시 데이터 반환
         }
       }
 
@@ -1636,21 +1649,23 @@ ${rawText}
               setSessionMode('mentor');
             }
 
+            console.log("Setting viewState to:", viewState);
             setViewState(viewState);
+            setIsLoadingAuth(false);
             return;
           }
 
-          // 프로필 없음: 역할 선택 화면으로
+          // 프로필 없거나 역할 없음: 역할 선택 화면으로
           console.log("No profile or role, showing role select");
           setUser(extractUserFromSession(session));
           setViewState('role_select');
+          setIsLoadingAuth(false);
 
         } catch (e) {
           console.error("Load user profile error:", e);
           // 에러 시에도 역할 선택 화면으로 (로그인 상태 유지)
           setUser(extractUserFromSession(session));
           setViewState('role_select');
-        } finally {
           setIsLoadingAuth(false);
         }
       };

@@ -6,16 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OJT Master - AI 기반 신입사원 온보딩 교육 자료 생성 및 학습 관리 시스템 (v2.2.0)
 
-### 버전 히스토리
-
-| 버전 | 날짜 | 주요 변경 |
-|------|------|----------|
-| v2.2.0 | 2025-11-30 | Cloudflare R2 이미지 업로드, 드래그&드롭/붙여넣기 지원 (#26) |
-| v2.1.0 | 2025-11-30 | MentorDashboard 탭 기반 레이아웃, edit/eye 아이콘 추가 |
-| v2.0.5 | 2025-11 | 콘텐츠 편집 시 Quill 에디터 로드 수정 |
-| v2.0.0 | 2025-11 | Supabase + Gemini API 전환 |
-| v1.x | 2025-10 | Firebase + Ollama (레거시) |
-
 ## Tech Stack
 
 | 영역 | 기술 |
@@ -24,129 +14,52 @@ OJT Master - AI 기반 신입사원 온보딩 교육 자료 생성 및 학습 �
 | **Backend/DB** | Supabase (PostgreSQL + Auth) |
 | **Local Cache** | Dexie.js (IndexedDB) |
 | **AI** | Google Gemini API (gemini-2.0-flash-exp) |
-| **Styling** | Tailwind CSS (CDN) |
-| **Editor** | Quill 2.0 (Rich Text + 이미지 업로드) |
 | **Image Storage** | Cloudflare R2 (Worker 프록시) |
-| **Charts** | Chart.js 4.4.1 (Admin Dashboard) |
-| **PDF Parsing** | PDF.js 3.11.174 |
-| **JSX Transform** | Babel Standalone (CDN) |
+| **Editor** | Quill 2.0 (Rich Text) |
 | **Hosting** | Vercel |
 
-## Architecture
+## Commands
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      클라이언트 (브라우저)                      │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │   React UI  │───▶│  Dexie.js   │◀──▶│  Supabase   │     │
-│  │             │    │ (IndexedDB) │    │   Client    │     │
-│  └─────────────┘    └──────┬──────┘    └──────┬──────┘     │
-│                            │                   │            │
-│                     로컬 캐시              API 호출          │
-└────────────────────────────┼───────────────────┼────────────┘
-                             │                   │
-                             ▼                   ▼
-                    ┌────────────────┐   ┌────────────────┐
-                    │  IndexedDB     │   │   Supabase     │
-                    │  (브라우저)     │   │   (PostgreSQL) │
-                    └────────────────┘   └────────────────┘
+```bash
+# 메인 앱 - 로컬 개발 서버
+npx serve . -p 3000
+
+# E2E 테스트 (Playwright)
+npm test                                    # 전체 테스트 실행
+npm run test:headed                         # 브라우저 화면 보면서 실행
+npm run test:ui                             # Playwright UI 모드
+npx playwright test tests/e2e-homepage.spec.js  # 단일 테스트 파일
+npm run test:report                         # HTML 리포트 보기
+
+# R2 Worker (ojt-r2-upload/ 디렉토리에서)
+cd ojt-r2-upload && npm run dev             # 로컬 개발 (wrangler)
+cd ojt-r2-upload && npm run deploy          # Cloudflare 배포
+cd ojt-r2-upload && npm test                # Vitest 테스트
 ```
+
+> **주의**: `playwright.config.js`의 `baseURL`을 로컬 서버 포트에 맞게 수정 필요
+
+## Architecture
 
 단일 `index.html` 파일에 모든 React 코드가 포함된 SPA 구조:
 
 ```text
-index.html
+index.html (전체 앱)
 ├── Supabase 초기화 (Auth + PostgreSQL)
 ├── Dexie.js 초기화 (로컬 캐시 + 오프라인 큐)
-├── 콘텐츠 추출 함수
-│   ├── extractPdfText() - PDF.js 텍스트 추출
-│   └── extractUrlText() - CORS 프록시 웹페이지 추출
-├── 자동 스텝 분할 로직
-│   ├── estimateReadingTime() - 학습 시간 추정
-│   ├── calculateRequiredSteps() - 필요 스텝 수 계산
-│   └── splitContentForSteps() - 콘텐츠 분할
-├── Gemini AI 콘텐츠 생성 함수
-├── App 컴포넌트
-│   ├── Google OAuth 인증
-│   ├── 역할 기반 뷰 분기 (Mentor/Mentee)
-│   ├── MentorDashboard (자료 생성 + Quill 에디터)
-│   ├── MenteeList (팀별 로드맵 탐색)
-│   └── MenteeStudy (학습 + 퀴즈)
-└── 퀴즈 로직 (20문제 풀 → 4문제 랜덤 추출, 3/4 통과)
+├── 콘텐츠 추출: extractPdfText(), extractUrlText()
+├── AI 생성: generateOJTContent(), checkAIStatus()
+├── 자동 분할: splitContentForSteps(), calculateRequiredSteps()
+├── R2 업로드: uploadImageToR2(), handleQuillImageDrop()
+├── 캐시 관리: clearAllCache(), processSyncQueue()
+└── App 컴포넌트
+    ├── Google OAuth 인증
+    ├── 역할 기반 뷰 분기 (Admin/Mentor/Mentee)
+    ├── AdminDashboard (사용자/콘텐츠 관리, 통계)
+    ├── MentorDashboard (자료 생성 + Quill 에디터)
+    ├── MenteeList (팀별 로드맵 탐색)
+    └── MenteeStudy (학습 + 퀴즈)
 ```
-
-## Core Functions
-
-### 콘텐츠 추출
-
-| 함수 | 파라미터 | 반환값 | 설명 |
-|------|----------|--------|------|
-| `extractPdfText(file, setProgress)` | File, callback | string | PDF.js로 텍스트 추출 |
-| `extractUrlText(url, setProgress)` | string, callback | string | CORS 프록시 경유 웹페이지 추출 |
-
-### AI 생성
-
-| 함수 | 파라미터 | 반환값 | 설명 |
-|------|----------|--------|------|
-| `generateOJTContent(rawText, team, step, setProgress, totalSteps)` | string, string, number, callback, number | Object | Gemini API로 OJT 콘텐츠 생성 |
-| `checkAIStatus()` | - | {online, provider, model} | Gemini API 상태 확인 |
-
-### 자동 분할
-
-| 함수 | 파라미터 | 반환값 | 설명 |
-|------|----------|--------|------|
-| `estimateReadingTime(text)` | string | number | 예상 학습 시간 (분) |
-| `calculateRequiredSteps(text)` | string | number | 필요 스텝 수 계산 |
-| `splitContentForSteps(text, numSteps)` | string, number | string[] | 의미 단위 분할 |
-
-### 캐시 관리
-
-| 함수 | 설명 |
-|------|------|
-| `clearAllCache()` | Dexie 캐시 전체 초기화 |
-| `checkCacheVersion()` | 캐시 버전 마이그레이션 |
-| `processSyncQueue()` | 오프라인 큐 동기화 처리 |
-
-### 이미지 업로드 (R2)
-
-| 함수 | 파라미터 | 반환값 | 설명 |
-|------|----------|--------|------|
-| `uploadImageToR2(file)` | File | string (URL) | Cloudflare R2에 이미지 업로드 |
-| `deleteImageFromR2(imageUrl)` | string | boolean | R2에서 이미지 삭제 |
-| `handleQuillImageUpload()` | - | void | Quill 툴바 이미지 버튼 핸들러 |
-| `handleQuillImageDrop(file)` | File | void | 드래그&드롭/붙여넣기 이미지 처리 |
-
-## Constants
-
-### 스텝 분할 설정
-
-| 상수 | 값 | 설명 |
-|------|-----|------|
-| `STEP_TIME_LIMIT` | 40분 | 한 스텝당 최대 학습 시간 |
-| `CHARS_PER_MINUTE` | 500자 | 분당 읽기 속도 (한국어) |
-| `MAX_CHARS_PER_STEP` | 20,000자 | 스텝당 최대 글자 수 |
-
-### 캐시 관리
-
-| 상수 | 값 | 설명 |
-|------|-----|------|
-| `CACHE_VERSION` | 2 | Dexie 스키마 버전 |
-| `MAX_SYNC_RETRIES` | 3 | 동기화 최대 재시도 |
-
-### 퀴즈 설정
-
-| 상수 | 값 | 설명 |
-|------|-----|------|
-| `QUIZ_PASS_THRESHOLD` | 3 | 통과 기준 (4문제 중) |
-
-### 이미지 업로드 (R2)
-
-| 상수 | 값 | 설명 |
-|------|-----|------|
-| `R2_WORKER_URL` | Worker URL | Cloudflare Worker 엔드포인트 |
-| `R2_MAX_FILE_SIZE` | 10MB | 최대 파일 크기 |
-| `R2_ALLOWED_TYPES` | JPG, PNG, GIF, WebP | 허용 파일 형식 |
 
 ## Data Structure
 
@@ -192,90 +105,15 @@ localDb.version(1).stores({
 });
 ```
 
-## Key Configuration
-
-> **보안 주의**: API 키는 환경 변수로 관리하세요. 아래는 구조 예시입니다.
-
-```javascript
-// Supabase
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
-
-// Google Gemini API
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.0-flash-exp";
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-```
-
-## Commands
-
-```bash
-# 로컬 개발 서버
-npx serve . -p 3000
-
-# E2E 테스트 실행
-npm test
-npm run test:headed    # 브라우저 보면서 실행
-npm run test:report    # HTML 리포트 보기
-```
-
 ## Role-Based Access
 
 | 역할 | 권한 |
 |------|------|
-| **Admin** | 전체 사용자/콘텐츠 관리, 역할 변경, 통계 대시보드, **Mentor 모드 전환** |
+| **Admin** | 전체 사용자/콘텐츠 관리, 역할 변경, 통계 대시보드, Mentor 모드 전환 |
 | **Mentor** | 비정형 텍스트 → AI 변환 → Supabase 저장, 자료 CRUD |
 | **Mentee** | 팀별 로드맵 탐색 → 문서 학습 → 퀴즈 평가 (읽기 전용) |
 
-### Admin 모드 전환 (v2.1.0+)
-
-Admin은 Header의 "모드" 버튼을 통해 Mentor 작업실로 전환할 수 있습니다.
-
-| 기능 | 설명 |
-|------|------|
-| **모드 전환** | Admin → Mentor 작업실 (문서 생성/수정) |
-| **모드 복귀** | Mentor 작업실 → Admin 대시보드 |
-| **세션 유지** | sessionStorage로 페이지 새로고침 시에도 모드 유지 |
-| **자동 초기화** | 로그아웃 또는 브라우저 종료 시 모드 초기화 |
-
-**상태 관리:**
-```javascript
-const [sessionMode, setSessionMode] = useState(null); // 'admin' | 'mentor' | null
-const displayRole = sessionMode || user?.role;
-```
-
-**UI 표시:**
-- Header 서브타이틀: `MENTOR MODE (임시)`
-- 역할 배지: Amber 색상 (임시 모드 표시)
-- 경고 배너: "MENTOR 모드로 작업 중입니다 (임시)"
-
-## Admin Dashboard
-
-관리자 전용 대시보드 (`viewState: 'admin_dashboard'`)
-
-### 탭 구성
-
-| 탭 | 기능 | 컴포넌트 |
-|-----|------|----------|
-| **사용자 관리** | 전체 사용자 목록, 역할 변경 (admin/mentor/mentee) | 테이블 + 모달 |
-| **콘텐츠 관리** | 전체 OJT 문서 목록, 삭제 기능 | 테이블 + 삭제 버튼 |
-| **통계** | 역할별 분포, 팀별 문서 수, 학습 통과율 | Chart.js 차트 |
-
-### 통계 카드
-
-| 지표 | 설명 |
-|------|------|
-| 총 사용자 | 전체 등록 사용자 수 |
-| 총 문서 | 전체 OJT 문서 수 |
-| 총 학습 기록 | 전체 퀴즈 응시 기록 수 |
-| 통과율 | (통과 기록 / 전체 기록) × 100% |
-
-### Chart.js 차트
-
-| 차트 | 유형 | 데이터 |
-|------|------|--------|
-| 역할별 사용자 분포 | Doughnut | admin/mentor/mentee 비율 |
-| 팀별 문서 수 | Bar | 팀별 OJT 문서 개수 |
+**Admin 모드 전환**: Header의 "모드" 버튼으로 Mentor 작업실 전환 가능. `sessionStorage`로 세션 유지.
 
 ## Sync Strategy (Online-First, Offline-Ready)
 
@@ -335,81 +173,61 @@ URL 콘텐츠 추출 시 사용하는 프록시 목록 (순차 시도):
 - **Supabase Auth**: Google OAuth
 - **AI**: Google Gemini API (무료 티어)
 
+> **중요**: 이 프로젝트는 Vercel에 연동되어 있어 main 브랜치 push 시 자동 배포됩니다.
+> **코드 수정 또는 이슈 해결 후 반드시 커밋 & 푸시하세요.**
+
 ## Project Structure
 
 ```text
 ggp_ojt_v2/
-├── index.html                           # 전체 앱 (단일 파일 SPA)
-├── supabase_schema.sql                  # Supabase 기본 스키마
-├── supabase_fix_rls.sql                 # RLS 수정 스크립트
-├── supabase_performance.sql             # Phase 1: 인덱스 최적화 ✅
-├── supabase_phase2_learning_progress.sql # Phase 2: 학습 진행률 ✅
-├── supabase_phase3_teams.sql            # Phase 3: teams 테이블 ✅
-├── package.json                         # 프로젝트 메타데이터 (v2.1.0)
-├── playwright.config.js                 # E2E 테스트 설정
-├── CLAUDE.md                            # AI 개발 가이드 (이 파일)
+├── index.html                    # 전체 앱 (단일 파일 SPA)
+├── supabase_*.sql                # DB 스키마 및 마이그레이션 파일들
+├── playwright.config.js          # E2E 테스트 설정
 ├── docs/
-│   ├── prd.md                           # 원본 PRD (기획 참조용)
-│   ├── guide.md                         # 배포 가이드 (구버전 - Firebase)
-│   ├── DB_MIGRATION_GUIDE.md            # DB 마이그레이션 가이드
-│   └── PERFORMANCE_OPTIMIZATION.md      # 성능 최적화 가이드
-├── tasks/
-│   └── prds/
-│       ├── 0001-rbac-deployment.md
-│       ├── 0002-mvp-optimized.md        # Ollama 버전 (레거시)
-│       └── 0003-web-deployment.md       # Supabase + Dexie.js 설계
-└── tests/
-    └── e2e-homepage.spec.js             # Playwright E2E 테스트
+│   ├── DB_MIGRATION_GUIDE.md     # DB 마이그레이션 가이드
+│   └── r2-setup-guide.md         # R2 설정 가이드
+├── tests/
+│   ├── e2e-homepage.spec.js      # 홈페이지 E2E 테스트
+│   └── e2e-admin-mode.spec.js    # Admin 모드 E2E 테스트
+└── ojt-r2-upload/                # Cloudflare R2 Worker 프로젝트
+    ├── src/index.js              # Worker 핸들러 (upload/delete/get)
+    └── wrangler.jsonc            # Cloudflare 설정
 ```
 
-## Future Development (Research)
+## Known Issues (2025-12-01 코드 리뷰)
 
-### 멀티미디어 블로그 확장 (v3.0 계획)
+> 상세 내용: `TODO.md`, `CODE_REVIEW_*.md`, `PERFORMANCE_ANALYSIS.md` 참조
 
-현재 Quill 에디터의 텍스트 중심 한계를 극복하고, 이미지/영상 첨부가 자유로운 블로그 형태로 확장하기 위한 리서치 결과:
+### Critical (즉시 수정 필요)
 
-#### 추천 아키텍처
-```
-Supabase (Auth + PostgreSQL) + Cloudflare R2 (미디어) + BlockNote (에디터)
-```
+| 이슈 | 위치 | 설명 |
+|------|------|------|
+| API 키 노출 | `index.html:106-108, 160` | Gemini API 키 하드코딩 → Edge Function 프록시 필요 |
+| XSS 취약점 | `index.html:1478` | Quill HTML 미검증 → DOMPurify 필요 |
+| 퀴즈 점수 버그 | 퀴즈 로직 | 정답 인덱스 0일 때 오답 처리 |
+| 무한 루프 위험 | 퀴즈 더미 | `result.quiz` 배열 검증 부재 |
 
-#### 스토리지 솔루션 비교
-| 서비스 | 무료 용량 | 월 100GB 비용 | 다운로드 비용 |
-|--------|----------|---------------|--------------|
-| **Cloudflare R2** | 10GB | $1.50 | **무료** |
-| **Backblaze B2 + CF** | 10GB | $0.60 | **무료** |
-| Supabase Storage | 1GB | ~$2.50 | 유료 |
+### High (1주 내 수정)
 
-#### 블록 에디터 비교
-| 에디터 | GitHub Stars | 이미지 업로드 | 추천도 |
-|--------|-------------|--------------|--------|
-| **BlockNote** | 7,000+ | 내장 | 🥇 |
-| **Tiptap** | 33,000+ | 확장 필요 | 🥈 |
-| Lexical | 22,500+ | 직접 구현 | 🥉 |
+- **보안**: 파일 업로드 매직 넘버 미검증, URL SSRF, 역할 변경 감사 로그 없음
+- **로직**: 스텝 분할 불일치, AI 파싱 실패 처리, 동기화 큐 중복
+- **성능**: Quill 메모리 누수, 불필요한 리렌더링, 중복 API 호출
+- **구조**: 2,710줄 단일 파일, alert() 남용, 매직 넘버
 
-#### 참고 문서
-- `docs/rich-text-editor-comparison.md` - 에디터 상세 비교
-- 리서치 일자: 2025-11-30
+### 코드 품질 점수: 62/100
 
----
+| 분류 | Critical | High | Medium | Low |
+|------|----------|------|--------|-----|
+| Security | 1 | 5 | 6 | 2 |
+| Logic | 2 | 5 | 4 | 2 |
+| Style | 0 | 4 | 6 | 2 |
+| Performance | 0 | 8 | 12 | 8 |
 
-## GitHub Issues
+## Development Notes
 
-| # | Status | Title |
-|---|--------|-------|
-| #26 | OPEN | Feature: 멀티미디어 블로그 확장 (BlockNote + R2) |
-| #25 | OPEN | Feature: Admin ↔ Mentor 모드 전환 기능 |
-| #24 | CLOSED | Security: SECURITY DEFINER 함수 NULL 체크 부재 |
-| #23 | CLOSED | Security: RLS 정책 - users.role UPDATE 검증 부재 |
-| #22 | CLOSED | Security: Gemini API 키 클라이언트 사이드 노출 |
-| #21 | CLOSED | Docs: 0002-mvp-optimized.md Ollama 레거시 표기 |
-| #20 | CLOSED | Docs: PRD 문서 섹션 구조 통일 |
-| #19 | CLOSED | Docs: PRD 문서 기술 스택 현황 업데이트 |
-| #18 | CLOSED | Test: E2E 테스트 Ollama → Gemini 업데이트 |
-| #17 | CLOSED | Docs: guide.md Firebase 구버전 설명 정리 |
-| #16 | CLOSED | Bug: 캐시(IndexedDB) 정리 로직 부재 |
-| #15 | CLOSED | Feature: Ollama → Google Gemini API 전환 |
-| #13 | CLOSED | Bug: 로그인 후 역할 변경 불가 |
-| #12 | CLOSED | Bug: Supabase RLS 재귀적 자기 참조 |
-| #9 | CLOSED | Feature: 관리자 페이지 및 인증 시스템 |
-| #7 | CLOSED | Research: 유사 솔루션 벤치마킹 |
+### 작업 시 주의사항
+
+1. **API 키**: 현재 클라이언트에 노출됨. 새 기능 추가 시 Edge Function 사용 권장
+2. **XSS**: 사용자 입력 HTML 사용 시 반드시 DOMPurify 적용
+3. **퀴즈 로직**: 인덱스 0 처리 주의 (`hasOwnProperty` 사용)
+4. **단일 파일**: 수정 시 함수 위치 파악 어려움. 향후 파일 분리 예정
