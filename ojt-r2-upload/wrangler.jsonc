@@ -18,7 +18,10 @@
 
 	// 환경 변수
 	// ⚠️ R2_PUBLIC_URL은 r2.dev URL 또는 Custom Domain으로 변경 필요
+	// ⚠️ ALLOWED_ORIGINS_DEV는 개발 환경 localhost 포트 (쉼표 구분)
 	"vars": {
-		"R2_PUBLIC_URL": "https://pub-xxxxxxxx.r2.dev"
+		"R2_PUBLIC_URL": "https://pub-xxxxxxxx.r2.dev",
+		"ALLOWED_ORIGINS_DEV": "http://localhost:3000,http://localhost:51544",
+		"ALLOWED_ORIGINS_PROD": "https://ggp-ojt-v2.vercel.app"
 	}
 }
